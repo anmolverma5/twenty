@@ -7,6 +7,7 @@ import { WorkspaceIteratorService } from 'src/database/commands/command-runners/
 import { type RunOnWorkspaceArgs } from 'src/database/commands/command-runners/workspace.command-runner';
 import { getStandardFlatEntitiesToCreateOrThrow } from 'src/database/commands/upgrade-version-command/2-10/utils/get-standard-flat-entities-to-create-or-throw.util';
 import { buildDuplicateActivityTargetQuery } from 'src/database/commands/upgrade-version-command/2-38/utils/build-duplicate-activity-target-query.util';
+import { resolveActivityTargetColumns } from 'src/database/commands/upgrade-version-command/2-38/utils/resolve-activity-target-columns.util';
 import { ApplicationService } from 'src/engine/core-modules/application/application.service';
 import { RegisteredWorkspaceCommand } from 'src/engine/core-modules/upgrade/decorators/registered-workspace-command.decorator';
 import { type FlatIndexMetadata } from 'src/engine/metadata-modules/flat-index-metadata/types/flat-index-metadata.type';
@@ -17,22 +18,31 @@ import { WorkspaceMigrationBuilderException } from 'src/engine/workspace-manager
 import { WorkspaceMigrationValidateBuildAndRunService } from 'src/engine/workspace-manager/workspace-migration/services/workspace-migration-validate-build-and-run-service';
 
 const ACTIVITY_TARGET_CONFIGS = [
-  { tableName: 'taskTarget', parentColumnName: 'taskId' },
-  { tableName: 'noteTarget', parentColumnName: 'noteId' },
+  {
+    tableName: 'taskTarget',
+    parentColumnName: 'taskId',
+    uniqueIndexUniversalIdentifiers: [
+      STANDARD_OBJECTS.taskTarget.indexes.taskPersonUniqueIndex
+        .universalIdentifier,
+      STANDARD_OBJECTS.taskTarget.indexes.taskCompanyUniqueIndex
+        .universalIdentifier,
+      STANDARD_OBJECTS.taskTarget.indexes.taskOpportunityUniqueIndex
+        .universalIdentifier,
+    ],
+  },
+  {
+    tableName: 'noteTarget',
+    parentColumnName: 'noteId',
+    uniqueIndexUniversalIdentifiers: [
+      STANDARD_OBJECTS.noteTarget.indexes.notePersonUniqueIndex
+        .universalIdentifier,
+      STANDARD_OBJECTS.noteTarget.indexes.noteCompanyUniqueIndex
+        .universalIdentifier,
+      STANDARD_OBJECTS.noteTarget.indexes.noteOpportunityUniqueIndex
+        .universalIdentifier,
+    ],
+  },
 ] as const;
-
-const ACTIVITY_TARGET_UNIQUE_INDEX_UNIVERSAL_IDENTIFIERS = [
-  STANDARD_OBJECTS.taskTarget.indexes.taskPersonUniqueIndex.universalIdentifier,
-  STANDARD_OBJECTS.taskTarget.indexes.taskCompanyUniqueIndex
-    .universalIdentifier,
-  STANDARD_OBJECTS.taskTarget.indexes.taskOpportunityUniqueIndex
-    .universalIdentifier,
-  STANDARD_OBJECTS.noteTarget.indexes.notePersonUniqueIndex.universalIdentifier,
-  STANDARD_OBJECTS.noteTarget.indexes.noteCompanyUniqueIndex
-    .universalIdentifier,
-  STANDARD_OBJECTS.noteTarget.indexes.noteOpportunityUniqueIndex
-    .universalIdentifier,
-];
 
 @RegisteredWorkspaceCommand('2.38.0', 1788425677783)
 @Command({
@@ -85,17 +95,39 @@ export class EnforceActivityTargetUniquenessCommand extends ProvisionedWorkspace
     }
 
     let duplicateCount = 0;
+    const uniqueIndexUniversalIdentifiers: string[] = [];
 
     for (const targetConfig of ACTIVITY_TARGET_CONFIGS) {
+      const rows = await dataSource.query<Array<{ column_name: string }>>(
+        `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2`,
+        [schemaName, targetConfig.tableName],
+      );
+      const targetColumns = resolveActivityTargetColumns(
+        new Set(rows.map(({ column_name }) => column_name)),
+      );
+
+      if (!isDefined(targetColumns)) {
+        this.logger.error(
+          `MANUAL REPAIR REQUIRED: skipping activity target uniqueness for ${targetConfig.tableName} in workspace ${workspaceId}: expected target columns are incomplete`,
+        );
+
+        continue;
+      }
+
       const [result] = await dataSource.query<Array<{ count: number }>>(
         buildDuplicateActivityTargetQuery({
           schemaName,
-          ...targetConfig,
+          tableName: targetConfig.tableName,
+          parentColumnName: targetConfig.parentColumnName,
+          targetColumns,
           deleteDuplicates: !options.dryRun,
         }),
       );
 
       duplicateCount += result?.count ?? 0;
+      uniqueIndexUniversalIdentifiers.push(
+        ...targetConfig.uniqueIndexUniversalIdentifiers,
+      );
     }
 
     const { flatIndexMaps } = await this.workspaceCacheService.getOrRecompute(
@@ -116,8 +148,7 @@ export class EnforceActivityTargetUniquenessCommand extends ProvisionedWorkspace
       getStandardFlatEntitiesToCreateOrThrow<FlatIndexMetadata>({
         standardFlatEntityMaps: standardAllFlatEntityMaps.flatIndexMaps,
         existingFlatEntityMaps: flatIndexMaps,
-        universalIdentifiers:
-          ACTIVITY_TARGET_UNIQUE_INDEX_UNIVERSAL_IDENTIFIERS,
+        universalIdentifiers: uniqueIndexUniversalIdentifiers,
       });
 
     this.logger.log(
