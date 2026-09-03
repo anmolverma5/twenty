@@ -13,6 +13,7 @@ import {
 import { type MetadataUniversalFlatEntity } from 'src/engine/metadata-modules/flat-entity/types/metadata-universal-flat-entity.type';
 import { getMetadataFlatEntityMapsKey } from 'src/engine/metadata-modules/flat-entity/utils/get-metadata-flat-entity-maps-key.util';
 import { isSystemSideEffectFlatEntity } from 'src/engine/metadata-modules/flat-entity/utils/is-system-side-effect-flat-entity.util';
+import { keepExistingIdentifiersByNaturalKey } from 'src/engine/metadata-modules/flat-entity/utils/keep-existing-identifiers-by-natural-key.util';
 import { keepWorkspaceOwnedProperties } from 'src/engine/metadata-modules/flat-entity/utils/keep-workspace-owned-properties.util';
 import { type MetadataUniversalFlatEntityMaps } from 'src/engine/workspace-manager/workspace-migration/universal-flat-entity/types/metadata-universal-flat-entity-maps.type';
 import { compareTwoFlatEntity } from 'src/engine/workspace-manager/workspace-migration/universal-flat-entity/utils/compare-two-universal-flat-entity.util';
@@ -45,7 +46,11 @@ const buildFlatEntityOperationRecordForMetadata = <T extends AllMetadataName>({
     keepWorkspaceOwnedProperties({
       metadataName,
       fromFlatEntityMaps,
-      toFlatEntityMaps,
+      toFlatEntityMaps: keepExistingIdentifiersByNaturalKey({
+        metadataName,
+        fromFlatEntityMaps,
+        toFlatEntityMaps,
+      }),
     });
 
   const flatEntityToCreate = Object.values(toByUniversalIdentifier)
