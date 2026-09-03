@@ -2487,6 +2487,7 @@ enum BillingEntitlementKey {
   CUSTOM_DOMAIN
   RLS
   AUDIT_LOGS
+  USAGE_LIMIT
 }
 
 type DomainRecord {

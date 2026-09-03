@@ -253,6 +253,21 @@ export class BillingSubscriptionService {
     return entitlement?.value ?? false;
   }
 
+  async getWorkspaceEntitlementValue(
+    workspaceId: string,
+    key: BillingEntitlementKey,
+  ): Promise<boolean> {
+    if (!this.enterprisePlanService.isValid()) {
+      return false;
+    }
+
+    if (!this.twentyConfigService.get('IS_BILLING_ENABLED')) {
+      return true;
+    }
+
+    return this.getWorkspaceEntitlementByKey(workspaceId, key);
+  }
+
   async endTrialPeriod(workspace: WorkspaceEntity) {
     const billingSubscription = await this.getCurrentBillingSubscriptionOrThrow(
       { workspaceId: workspace.id },
