@@ -2,8 +2,7 @@ import { ALL_METADATA_NAME } from 'twenty-shared/metadata';
 
 import { type AllFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/all-flat-entity-maps.type';
 import { getMetadataFlatEntityMapsKey } from 'src/engine/metadata-modules/flat-entity/utils/get-metadata-flat-entity-maps-key.util';
-import { keepExistingIdentifiersByNaturalKey } from 'src/engine/metadata-modules/flat-entity/utils/keep-existing-identifiers-by-natural-key.util';
-import { keepWorkspaceOwnedProperties } from 'src/engine/metadata-modules/flat-entity/utils/keep-workspace-owned-properties.util';
+import { reconcileToFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/reconcile-to-flat-entity-maps.util';
 import { type FromToAllUniversalFlatEntityMaps } from 'src/engine/workspace-manager/workspace-migration/types/workspace-migration-orchestrator.type';
 
 export const buildFromToAllUniversalFlatEntityMaps = ({
@@ -22,14 +21,10 @@ export const buildFromToAllUniversalFlatEntityMaps = ({
 
     const fromTo = {
       from: fromFlatEntityMaps,
-      to: keepWorkspaceOwnedProperties({
+      to: reconcileToFlatEntityMaps({
         metadataName,
         fromFlatEntityMaps,
-        toFlatEntityMaps: keepExistingIdentifiersByNaturalKey({
-          metadataName,
-          fromFlatEntityMaps,
-          toFlatEntityMaps,
-        }),
+        toFlatEntityMaps,
       }),
     };
 

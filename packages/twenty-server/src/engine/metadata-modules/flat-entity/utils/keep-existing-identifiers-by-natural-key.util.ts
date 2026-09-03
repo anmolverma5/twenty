@@ -37,48 +37,89 @@ export const keepExistingIdentifiersByNaturalKey = <
     return toFlatEntityMaps;
   }
 
-  const fromUniversalIdentifierByNaturalKey = new Map<string, string>();
+  const existingUniversalIdentifierByNaturalKey = new Map(
+    Object.values(fromFlatEntityMaps.byUniversalIdentifier)
+      .filter(isDefined)
+      .map((fromFlatEntity) => [
+        computeNaturalKey(fromFlatEntity, naturalKeyProperties),
+        fromFlatEntity.universalIdentifier,
+      ]),
+  );
 
-  for (const fromFlatEntity of Object.values(
-    fromFlatEntityMaps.byUniversalIdentifier,
-  )) {
-    if (!isDefined(fromFlatEntity)) {
-      continue;
-    }
-
-    fromUniversalIdentifierByNaturalKey.set(
-      computeNaturalKey(fromFlatEntity, naturalKeyProperties),
-      fromFlatEntity.universalIdentifier,
-    );
-  }
-
-  const byUniversalIdentifier = { ...toFlatEntityMaps.byUniversalIdentifier };
-
-  for (const toFlatEntity of Object.values(
+  const toFlatEntities = Object.values(
     toFlatEntityMaps.byUniversalIdentifier,
-  )) {
-    if (!isDefined(toFlatEntity)) {
-      continue;
-    }
+  ).filter(isDefined);
 
-    const existingUniversalIdentifier = fromUniversalIdentifierByNaturalKey.get(
-      computeNaturalKey(toFlatEntity, naturalKeyProperties),
-    );
+  const existingUniversalIdentifierByToUniversalIdentifier = new Map<
+    string,
+    string
+  >();
+
+  for (const toFlatEntity of toFlatEntities) {
+    const existingUniversalIdentifier =
+      existingUniversalIdentifierByNaturalKey.get(
+        computeNaturalKey(toFlatEntity, naturalKeyProperties),
+      );
 
     if (
-      !isDefined(existingUniversalIdentifier) ||
-      existingUniversalIdentifier === toFlatEntity.universalIdentifier ||
-      isDefined(byUniversalIdentifier[existingUniversalIdentifier])
+      isDefined(existingUniversalIdentifier) &&
+      existingUniversalIdentifier !== toFlatEntity.universalIdentifier
     ) {
-      continue;
+      existingUniversalIdentifierByToUniversalIdentifier.set(
+        toFlatEntity.universalIdentifier,
+        existingUniversalIdentifier,
+      );
     }
-
-    delete byUniversalIdentifier[toFlatEntity.universalIdentifier];
-    byUniversalIdentifier[existingUniversalIdentifier] = {
-      ...toFlatEntity,
-      universalIdentifier: existingUniversalIdentifier,
-    };
   }
+
+  if (existingUniversalIdentifierByToUniversalIdentifier.size === 0) {
+    return toFlatEntityMaps;
+  }
+
+  const stayingUniversalIdentifiers = new Set(
+    toFlatEntities
+      .map((toFlatEntity) => toFlatEntity.universalIdentifier)
+      .filter(
+        (universalIdentifier) =>
+          !existingUniversalIdentifierByToUniversalIdentifier.has(
+            universalIdentifier,
+          ),
+      ),
+  );
+  const claimCountByExistingUniversalIdentifier = new Map<string, number>();
+
+  for (const existingUniversalIdentifier of existingUniversalIdentifierByToUniversalIdentifier.values()) {
+    claimCountByExistingUniversalIdentifier.set(
+      existingUniversalIdentifier,
+      (claimCountByExistingUniversalIdentifier.get(
+        existingUniversalIdentifier,
+      ) ?? 0) + 1,
+    );
+  }
+
+  const byUniversalIdentifier = Object.fromEntries(
+    toFlatEntities.map((toFlatEntity) => {
+      const existingUniversalIdentifier =
+        existingUniversalIdentifierByToUniversalIdentifier.get(
+          toFlatEntity.universalIdentifier,
+        );
+
+      if (
+        !isDefined(existingUniversalIdentifier) ||
+        stayingUniversalIdentifiers.has(existingUniversalIdentifier) ||
+        claimCountByExistingUniversalIdentifier.get(
+          existingUniversalIdentifier,
+        ) !== 1
+      ) {
+        return [toFlatEntity.universalIdentifier, toFlatEntity];
+      }
+
+      return [
+        existingUniversalIdentifier,
+        { ...toFlatEntity, universalIdentifier: existingUniversalIdentifier },
+      ];
+    }),
+  );
 
   return { ...toFlatEntityMaps, byUniversalIdentifier };
 };
