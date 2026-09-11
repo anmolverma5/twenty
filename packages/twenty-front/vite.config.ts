@@ -37,14 +37,13 @@ export default defineConfig(({ mode }) => {
     ? parseInt(REACT_APP_PORT)
     : 3001;
 
-  const apiProxyTarget = isNonEmptyString(REACT_APP_SERVER_BASE_URL)
-    ? REACT_APP_SERVER_BASE_URL
-    : 'http://localhost:3000';
+  const apiProxyTarget =
+    process.env.API_PROXY_TARGET || 'http://127.0.0.1:3010';
 
   const apiProxy = Object.fromEntries(
     API_PROXY_PATHS.map((apiPath) => [
       buildApiProxyMatcher(apiPath),
-      { target: apiProxyTarget },
+      { target: apiProxyTarget, changeOrigin: true },
     ]),
   );
 
@@ -67,6 +66,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: port,
       proxy: apiProxy,
+      allowedHosts: true,
       ...(VITE_HOST ? { host: VITE_HOST } : {}),
       ...(SSL_KEY_PATH && SSL_CERT_PATH
         ? {

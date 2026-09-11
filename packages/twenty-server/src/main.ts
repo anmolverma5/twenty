@@ -120,7 +120,7 @@ const bootstrap = async () => {
     });
   }
 
-  await app.listen(twentyConfigService.get('NODE_PORT'));
+  await app.listen(twentyConfigService.get('NODE_PORT'), '0.0.0.0');
 };
 
 void bootstrap();
